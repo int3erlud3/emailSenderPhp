@@ -48,7 +48,14 @@ Exit codes: 0 sent (or dry-run OK), 1 sending failed, 2 usage/validation error,
 3 configuration error
 TXT;
 
-$args = array_slice($argv, 1);
+// $argv is not guaranteed to exist (register_argc_argv); read the arguments from $_SERVER.
+$rawArgs = $_SERVER['argv'] ?? [];
+$args = [];
+foreach (is_array($rawArgs) ? array_slice($rawArgs, 1) : [] as $arg) {
+    if (is_string($arg)) {
+        $args[] = $arg;
+    }
+}
 $opts = ['json' => false, 'dry-run' => false, 'no-banner' => false];
 $values = [];
 for ($i = 0; $i < count($args); $i++) {
