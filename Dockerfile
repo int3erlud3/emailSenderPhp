@@ -4,7 +4,9 @@
 FROM composer:2.10.3 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --no-progress --no-scripts --prefer-dist --classmap-authoritative
+RUN composer install --no-dev --no-interaction --no-progress --no-scripts --prefer-dist --no-autoloader
+COPY src ./src
+RUN composer dump-autoload --no-dev --classmap-authoritative
 
 FROM php:8.4.26-apache-trixie
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
