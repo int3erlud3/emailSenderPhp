@@ -1,0 +1,129 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * send-mail - send a plain-text e-mail over SMTP (TLS) using the environment configuration.
+ *
+ *   send-mail --to ADDRESS --subject TEXT [--body-file FILE | < body.txt] [--reply-to ADDRESS]
+ *             [--dry-run] [--json] [--no-banner]
+ */
+
+use EmailSender\Banner;
+use EmailSender\Config;
+use EmailSender\ConfigException;
+use EmailSender\MailException;
+use EmailSender\Mailer;
+use EmailSender\Message;
+use EmailSender\Validator;
+
+$autoload = [dirname(__DIR__) . '/vendor/autoload.php', dirname(__DIR__, 3) . '/autoload.php'];
+foreach ($autoload as $file) {
+    if (is_file($file)) {
+        require $file;
+        break;
+    }
+}
+
+const USAGE = <<<'TXT'
+Usage: send-mail --to ADDRESS --subject TEXT [options]
+
+Options:
+  --to ADDRESS        recipient (required)
+  --subject TEXT      subject (required, no line breaks)
+  --body-file FILE    read the body from FILE (default: standard input)
+  --reply-to ADDRESS  Reply-To address
+  --dry-run           validate configuration and input, do not send
+  --json              machine-readable result on stdout (never shows the banner)
+  --no-banner         do not print the banner (or set NO_BANNER=1)
+  -h, --help          show this help
+  -V, --version       show version
+
+Configuration comes from environment variables only (see .env.example):
+  SMTP_HOST, SMTP_PORT, SMTP_ENCRYPTION (starttls|smtps), SMTP_USERNAME,
+  SMTP_PASSWORD_FILE or SMTP_PASSWORD, MAIL_FROM, MAIL_FROM_NAME, MAIL_TO
+
+Exit codes: 0 sent (or dry-run OK), 1 sending failed, 2 usage/validation error,
+3 configuration error
+TXT;
+
+$args = array_slice($argv, 1);
+$opts = ['json' => false, 'dry-run' => false, 'no-banner' => false];
+$values = [];
+for ($i = 0; $i < count($args); $i++) {
+    $a = $args[$i];
+    if (in_array($a, ['--json', '--dry-run', '--no-banner'], true)) {
+        $opts[substr($a, 2)] = true;
+    } elseif (in_array($a, ['-h', '--help', '-V', '--version'], true)) {
+        $values['info'] = $a;
+    } elseif (in_array($a, ['--to', '--subject', '--body-file', '--reply-to'], true)) {
+        if (!isset($args[$i + 1])) {
+            fwrite(STDERR, "send-mail: error: $a requires a value\n");
+            exit(2);
+        }
+        $values[substr($a, 2)] = $args[++$i];
+    } else {
+        fwrite(STDERR, "send-mail: error: unknown argument: $a\n" . USAGE . "\n");
+        exit(2);
+    }
+}
+
+if (!$opts['json']) {
+    Banner::maybePrint($opts['no-banner']);
+}
+if (isset($values['info'])) {
+    echo in_array($values['info'], ['-V', '--version'], true) ? 'send-mail ' . Banner::VERSION . "\n" : USAGE . "\n";
+    exit(0);
+}
+
+$result = static function (int $code, string $status, string $message) use ($opts): never {
+    if ($opts['json']) {
+        echo json_encode(['status' => $status, 'message' => $message, 'exit_code' => $code], JSON_THROW_ON_ERROR), "\n";
+    } else {
+        fwrite($code === 0 ? STDOUT : STDERR, ($code === 0 ? '' : 'send-mail: error: ') . $message . "\n");
+    }
+    exit($code);
+};
+
+$to = $values['to'] ?? '';
+$subject = $values['subject'] ?? '';
+$replyTo = $values['reply-to'] ?? null;
+if (!Validator::isValidEmail($to)) {
+    $result(2, 'invalid', '--to must be a valid e-mail address');
+}
+if ($replyTo !== null && !Validator::isValidEmail($replyTo)) {
+    $result(2, 'invalid', '--reply-to must be a valid e-mail address');
+}
+if ($subject === '' || !Validator::isHeaderSafe($subject) || mb_strlen($subject) > 200) {
+    $result(2, 'invalid', '--subject is required and must not contain line breaks or control characters');
+}
+
+if (isset($values['body-file'])) {
+    $body = is_file($values['body-file']) ? file_get_contents($values['body-file'], false, null, 0, 1048577) : false;
+} else {
+    $body = stream_get_contents(STDIN, 1048577);
+}
+if (!is_string($body) || $body === '' || strlen($body) > 1048576 || !mb_check_encoding($body, 'UTF-8')) {
+    $result(2, 'invalid', 'body must be non-empty UTF-8 text up to 1 MiB');
+}
+
+try {
+    /** @var array<string, string> $env */
+    $env = getenv();
+    $config = Config::fromEnv($env);
+} catch (ConfigException $e) {
+    $result(3, 'config_error', $e->getMessage());
+}
+
+if ($opts['dry-run']) {
+    $server = "{$config->smtpHost}:{$config->smtpPort} ({$config->encryption})";
+    $result(0, 'dry_run', "dry-run OK: would send to $to via $server");
+}
+
+try {
+    (new Mailer($config))->send(new Message($to, $subject, $body, $replyTo));
+} catch (MailException $e) {
+    $result(1, 'failed', $e->getMessage());
+}
+$result(0, 'sent', "sent to $to");

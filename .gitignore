@@ -1,0 +1,16 @@
+/vendor/
+/.phpunit.cache/
+/.phpstan-cache/
+/var/
+.env
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+*.zip
+*.tar
+*.gz
+*.tgz
+.idea/
+.vscode/

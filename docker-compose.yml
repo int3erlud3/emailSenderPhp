@@ -1,0 +1,48 @@
+# Local development / demo stack: the contact form plus Mailpit as a catch-all SMTP server.
+# Mail never leaves this machine. Ports are bound to 127.0.0.1 only.
+#   docker compose up -d --build
+#   form:    http://127.0.0.1:8080/
+#   mailbox: http://127.0.0.1:8025/
+name: email-sender-php
+
+services:
+  mailpit:
+    image: axllent/mailpit:v1.31.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"   # web UI + API
+      - "127.0.0.1:1025:1025"   # SMTP
+    environment:
+      MP_SMTP_AUTH_ALLOW_INSECURE: "false"
+      MP_MAX_MESSAGES: "500"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  app:
+    build: .
+    depends_on:
+      mailpit:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      # Plain SMTP is acceptable here only because Mailpit runs on the internal compose network.
+      # Production configuration must use starttls or smtps (the default).
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_ENCRYPTION: none
+      SMTP_ALLOW_INSECURE: "1"
+      MAIL_FROM: noreply@example.test
+      MAIL_FROM_NAME: Contact form (demo)
+      MAIL_TO: inbox@example.test
+      RATE_LIMIT_MAX: "20"
+      RATE_LIMIT_WINDOW: "3600"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

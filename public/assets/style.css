@@ -1,0 +1,15 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f6f8fa; color: #1d2430; }
+main { max-width: 640px; margin: 2rem auto; background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 1.5rem 2rem; }
+h1 { margin-top: 0; }
+.hint, .counter { color: #57606a; font-size: .9rem; }
+.field { margin-bottom: 1rem; }
+label { display: block; font-weight: 600; margin-bottom: .25rem; }
+input, textarea { width: 100%; padding: .5rem; border: 1px solid #d0d7de; border-radius: 6px; font: inherit; }
+input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: #cf222e; }
+.error { color: #cf222e; font-size: .85rem; margin: .25rem 0 0; min-height: 1em; }
+.counter { text-align: right; margin: .25rem 0 0; }
+button { background: #1f6feb; color: #fff; border: 0; border-radius: 6px; padding: .6rem 1.2rem; font: inherit; cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
+.status.ok { color: #1a7f37; } .status.error { color: #cf222e; }
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
